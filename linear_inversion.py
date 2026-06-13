@@ -1,23 +1,20 @@
 # %% [markdown]
-#  # Linear Inversion for Quantum State Tomography
+## Implementing Linear Inversion for Quantum State Tomography
 
 # %%
 import numpy as np
 import itertools
 from functools import reduce
 
-# Set printing options for clear terminal output
-np.set_printoptions(precision=4, suppress=True, linewidth=120)
+np.set_printoptions(precision=4, suppress=True, linewidth=180)
 
 
 # %% [markdown]
-#  ## 1. Create the Orthonormal Basis
-# 
-#  Choose `n_qubits`. Create a tensor of self-adjoint, orthonormal matrices to use as a basis for the state matrix.
-# 
-#  A $(2^n)^2$ vector of $2^n \times 2^n$ matrices is generated.
-# 
-#  We build each matrix as the tensor product of the combinations of the 1-qubit basis matrices.
+### Create the Orthonormal Basis
+#
+# Choose `n_qubits`. Create a tensor of self-adjoint, orthonormal matrices to use as a basis for the state matrix.
+# A $(2^n)^2$ vector of $2^n \times 2^n$ matrices is generated.
+# We build each matrix as the tensor product of the combinations of the 1-qubit basis matrices.
 
 # %%
 n_qubits = 2 # CAUTION: n_qubits > 6 crashes due to memory limits
@@ -44,19 +41,18 @@ matrix_base = matrix_base * scale_factor
 
 
 # %%
-# Test: check shape and orthonormality
+# TEST: check shape and orthonormality
 print("--- Basis Generation ---")
 print(f"Number of qubits: {n_qubits}")
 print(f"Number of parameters (4^n): {n_params}")
 print("Basis tensor shape:", matrix_base.shape)
 
-# Check orthonormality of a random element (should print 1.0 + 0.0j)
 ortho_check = np.trace(matrix_base[1] @ matrix_base[1].conj().T)
 print(f"Orthonormality check (one element): {ortho_check}")
 
 
 # %% [markdown]
-#  ## 2. Generate the True State Matrix
+### Generate the True State Matrix
 # 
 #  We generate a valid density matrix using the Ginibre ensemble approach to ensure it is
 # 
@@ -74,7 +70,7 @@ def generate_random_state():
     return rho
 
 # %%
-# Test: check physical constraints
+# TEST: check physical constraints
 rho_test = generate_random_state()
 print("\n--- Generated State ---")
 print("Trace(rho_test) [Should be 1.0]:", np.round(np.real(np.trace(rho_test)), 6))
@@ -86,7 +82,7 @@ print(np.round(eigenvalues, 4))
 
 
 # %% [markdown]
-#  ## 3. Define the POVM
+### Define the POVM
 # 
 #  The POVM has $4^n$ elements and must be informationally complete (IC).
 # 
@@ -114,13 +110,13 @@ combinations_povm = itertools.product(povm_1q, repeat=n_qubits)
 povm = np.array([reduce(np.kron, combo) for combo in combinations_povm])
 
 # %%
-# Test
+# TEST
 print("\n--- POVM ---")
 print("POVM shape: ", povm.shape)
 
 
 # %% [markdown]
-#  ## 4. Probability Vector
+### Probability Vector
 # 
 #  Vector $p$ containing the expected probabilities for each POVM outcome.
 
@@ -131,13 +127,13 @@ def probability_vector(rho, povm):
     return np.real(np.einsum('mij,ji->m', povm, rho))
 
 # %%
-# Test
-p_vec_test = probability_vector(rho_test)
+# TEST
+p_vec_test = probability_vector(rho_test, povm)
 print(p_vec_test)
 
 
 # %% [markdown]
-#  ## 5. Linear Inversion
+### Linear Inversion
 # 
 #  Building the design matrix $B$ and the reconstruction operator $M$.
 
@@ -154,8 +150,8 @@ def linear_inversion(frequency_vector):
 
 
 # %%
-# Test Reconstruction
-rho_test_reconstructed= linear_inversion(rho_test, povm)
+# TEST: Reconstruction
+rho_test_reconstructed=linear_inversion(p_vec_test)
 print("\n--- Linear Inversion ---")
 print("B matrix shape:", B.shape)
 print("M operator shape:", M.shape)
@@ -165,7 +161,7 @@ print("rho_test reconstructed:\n", rho_test_reconstructed)
 
 
 # %% [markdown]
-#  ## 6. Evaluation Metrics
+### Evaluation Metrics
 # 
 #  - **Trace Distance**: $T(\rho, \sigma) = \frac{1}{2} ||\rho - \sigma||_1$
 # 
@@ -177,9 +173,11 @@ def trace_distance(rho_1, rho_2):
     eigenvalues = np.linalg.eigvalsh(diff)
     return 0.5 * np.sum(np.abs(eigenvalues))
 
+tol = 1e-8
 def sqrt_hermitian_matrix(matrix):
     eigenvalues, U = np.linalg.eigh(matrix)
-    sqrt_eigenvalues = np.sqrt(eigenvalues) # np.clip(eigenvalues, 0, None) maybe?
+    sqrt_eigenvalues = np.sqrt(np.clip(eigenvalues, 0, None)) #  fix
+    if (eigenvalues<-tol).any(): print("! Negative eigenvalues!")
     return U @ np.diag(sqrt_eigenvalues) @ U.conj().T
 
 def fidelity(rho_1, rho_2):
@@ -187,12 +185,11 @@ def fidelity(rho_1, rho_2):
     inner_matrix = rho_1_sqrt @ rho_2 @ rho_1_sqrt
     inner_sqrt = sqrt_hermitian_matrix(inner_matrix)
     
-    # Real part handles microscopic imaginary floating-point artifacts
-    return np.real(np.trace(inner_sqrt))**2
+    return np.trace(inner_sqrt)**2
 
 
 # %%
-# TEST METRICS
+# TEST: Metrics
 print("Trace Distance (rho_test, rho_test):", np.round(trace_distance(rho_test, rho_test), 6))
 print("Fidelity (rho_test, rho_test):", np.round(fidelity(rho_test, rho_test), 6))
 
@@ -202,7 +199,7 @@ print("Fidelity (Reconstruction):", np.round(fidelity(rho_test, rho_test_reconst
 
 
 # %% [markdown]
-# # Simulation, 1 Qubit
+## Simulation
 # 
 # Create `n_states` random states.
 # Measure each of them `n_measures` times, each projector of the POVM is measured `n_measures_proj` times
@@ -210,7 +207,7 @@ print("Fidelity (Reconstruction):", np.round(fidelity(rho_test, rho_test_reconst
 
 # %%
 n_states = 10
-n_measures_proj = 10
+n_measures_proj = 1000
 n_measures = n_measures_proj * n_params
 print('n_measures: ',n_measures)
 
@@ -241,3 +238,5 @@ print(f"\nAverage Trace Distance: {np.mean(trace_distances):.4f} ± {np.std(trac
 print(f"\nAverage Fidelity: {np.mean(fidelities):.4f} ± {np.std(fidelities):.4f}")
 
 
+
+# %%
